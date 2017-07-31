@@ -28,3 +28,6 @@ def slack_action(request):
     logger.info(payload)
     _slack.handle_action(payload)
     return HttpResponse()
+
+def ping(request):
+    return HttpResponse()

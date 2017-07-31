@@ -179,7 +179,7 @@ class Slack(object):
         game.save()
 
         # Send stump message attachment
-        text = '*%s* askes stumper:\n*%s*' % (username, stump_text)
+        text = '*%s* asks stumper:\n*%s*' % (username, stump_text)
         footer = '%s, Are you stumped? If not, prove it!' % game.creator
         callback_id = json.dumps({'type': 'stump', 'id': stump.id})
         self.send_yesno(text, footer, callback_id, url)
@@ -217,7 +217,7 @@ class Slack(object):
         game.save()
 
         # Send question message attachment
-        text = '*%s* askes yes/no question:\n*%s*' % (username, question_text)
+        text = '*%s* asks yes/no question:\n*%s*' % (username, question_text)
         #footer = '%s, Are you stumped? If not, prove it!' % game.creator
         callback_id = json.dumps({'type': 'question', 'id': question.id})
         self.send_yesno(text, '', callback_id, url)
