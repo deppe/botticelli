@@ -144,7 +144,7 @@ class Slack(object):
         game.save()
 
         # Send reply
-        text = '*%s* has begun a game of Botticelli for letter *%s*... Begin!' % (username, letter)
+        text = '*%s* has begun a game of Botticelli for letter *%s*... <@channel|user>, begin!' % (username, letter)
         self.reply_text(text, url)
 
 
