@@ -50,7 +50,7 @@ class Game(models.Model):
                           'Letter: '  + self.letter,
                           'Channel: ' + self.channel,
                           'person: '  + self.person,
-                          'state: '   + self.state,
+                          'state: '   + repr(self.state),
                           'Updated: ' + repr(self.date_updated),
                           'Created: ' + repr(self.date_created)])
 
@@ -68,7 +68,7 @@ class Question(models.Model):
     def __repr__(self):
         return ', '.join(['Creator: ' + self.creator,
                           'Text: '    + self.text,
-                          'Answer: '  + self.answer,
+                          'Answer: '  + repr(self.answer),
                           'Updated: ' + repr(self.date_updated),
                           'Created: ' + repr(self.date_created)])
 
