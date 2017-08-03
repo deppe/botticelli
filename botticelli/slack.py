@@ -180,7 +180,7 @@ class Slack(object):
 
         # Send stump message attachment
         text = '*%s* asks stumper:\n*%s*' % (username, stump_text)
-        footer = '%s, Are you stumped? If not, prove it!' % game.creator
+        footer = '<@%s|user>, Are you stumped? If not, prove it!' % game.creator
         callback_id = json.dumps({'type': 'stump', 'id': stump.id})
         self.send_yesno(text, footer, callback_id, url)
 
@@ -217,8 +217,8 @@ class Slack(object):
         game.save()
 
         # Send question message attachment
-        text = '*%s* asks yes/no question:\n*%s*' % (username, question_text)
-        #footer = '%s, Are you stumped? If not, prove it!' % game.creator
+        text = '*%s* asks yes/no question for <@%s|user>:\n*%s*' \
+            % (username, game.creator, question_text)
         callback_id = json.dumps({'type': 'question', 'id': question.id})
         self.send_yesno(text, '', callback_id, url)
 
@@ -284,10 +284,10 @@ class Slack(object):
 
         # send a message reply
         if stump.answer:
-            text = '%s\n\n*%s* was stumped. *%s can now ask questions*.' \
+            text = '%s\n\n*%s* was stumped. *<@%s|user> can now ask questions*.' \
                 % (original_text, stump.game.creator, stump.creator)
         else:
-            text = '%s\n\n*%s* wasn\'t stumped. *Make sure he proves it*, then try again!' \
+            text = '%s\n\n*%s* wasn\'t stumped. *Make sure he proves it*, then try again <@channel|user>!' \
                 % (original_text, stump.game.creator)
         self.reply_text(text, url)
 
@@ -310,10 +310,10 @@ class Slack(object):
 
         # send a message reply
         if question.answer:
-            text = '%s\n\n*Correct!* *%s* can ask again.' \
+            text = '%s\n\n*Correct!* <@%s|user> can ask again.' \
                 % (original_text, question.creator)
         else:
-            text = '%s\n\n*Nope!* Back to stumper round.' \
+            text = '%s\n\n*Nope!* Time for <@channel|user> to stump.' \
                 % (original_text)
         self.reply_text(text, url)
 
