@@ -25,12 +25,9 @@ class Slack(object):
             'stump': self.handle_stump,
             'start': self.handle_start,
             'cancel': self.handle_cancel
-        }.get(action)
+        }.get(action) or self.handle_help
 
         logger.info('action %s, params %s' % (action, params))
-
-        if not func:
-            raise SlackException('could not recognize command ' + action)
 
         func(data, params)
 
@@ -182,7 +179,7 @@ class Slack(object):
         text = '*%s* asks stumper:\n*%s*' % (username, stump_text)
         footer = '<@%s|user>, Are you stumped? If not, prove it!' % game.creator
         callback_id = json.dumps({'type': 'stump', 'id': stump.id})
-        self.send_yesno(text, footer, callback_id, url)
+        self.send_yesno(text, footer, callback_id, url, 'I\'m stumped!', 'Not stumped!')
 
     def handle_question(self, data, question_text):
         if not question_text:
@@ -244,7 +241,7 @@ class Slack(object):
         result = requests.post(url, json=data, headers=headers)
         result.raise_for_status()
 
-    def send_yesno(self, stump_text, footer, callback_id, url):
+    def send_yesno(self, stump_text, footer, callback_id, url, yes_text='Yes', no_text='No'):
         data = {
             "text": stump_text,
             "response_type": "in_channel",
@@ -256,8 +253,8 @@ class Slack(object):
                 "attachment_type": "default",
                 "callback_id": callback_id,
                 "actions": [
-                    {"name": "yes", "text": "Yes", "type": "button", "value": "yes"},
-                    {"name": "no", "text": "No", "type": "button", "value": "no"}
+                    {"name": "yes", "text": yes_text, "type": "button", "value": "yes"},
+                    {"name": "no", "text": no_text, "type": "button", "value": "no"}
                 ]}
             ]
         }
