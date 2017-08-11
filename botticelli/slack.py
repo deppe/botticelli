@@ -15,6 +15,23 @@ class Slack(object):
     def __init__(self, token):
         self.client = slackclient.SlackClient(token)
 
+    def send_message(self, text, channel):
+        rc = self.client.api_call('chat.postMessage',
+                                  text=text,
+                                  channel=channel)
+
+        logger.info(rc)
+        return rc
+ 
+
+    def send_thread_message(self, text, channel, thread_ts):
+        rc = self.client.api_call('chat.postMessage',
+                                  text=text,
+                                  channel=channel,
+                                  thread_ts=thread_ts)
+        logger.info(rc)
+        return rc
+
     def handle_slash(self, data):
         action, params = parse_slash_command(data['text'])
 
@@ -39,16 +56,20 @@ class Slack(object):
             'question': self.handle_question_action,
         }[callback_id['type']](data, callback_id)
 
-    def handle_status(self, data, submode):
-        channel = data['channel_id']
-        url = data['response_url']
+    def get_status(self, channel, game=None):
+        status_lines = {
+            'header': None,
+            'text_lines': 'No active game of Botticelli',
+            'sub_lines': None,
+            'footer': None
+        }
 
-        games = Game.get_active(channel)
+        if not game:
+            games = Game.get_active(channel)
+            if games:
+                game = games[0]
     
-        if not games:
-            text = 'No active game of Botticelli'
-        else:
-            game = games[0]
+        if game:
             if game.state == State.Stump:
                 waiting_on, to_do = 'anyone', 'ask a stumper'
             elif game.state == State.PendingStump:
@@ -61,14 +82,17 @@ class Slack(object):
                 waiting_on = game.creator
                 to_do = 'respond to question: ' + game.get_active_question().text
 
-            text = "*********** *Current Status* ***********\n"
-            text += 'Botticelli game created by *%s* for letter *%s*.\nCurrently waiting on *%s* to *%s*\n\n' \
-                % (game.creator, game.letter, waiting_on, to_do)
+            status_lines['header'] = "*********** *Current Status* ***********"
+            status_lines['text_lines'] = [
+                'Botticelli game created by *%s* for letter *%s*.' % (game.creator, game.letter), 
+                'Currently waiting on *<@%s|user>* to *%s*' % (waiting_on, to_do)
+            ]
 
             questions = game.question_set.all().order_by('date_created')
 
             if questions:
-                text += '\nPrevious questions:\n'
+                sub_lines = ['Previous questions:']
+                next_msg = [] 
                 for question in questions:
                     if question.answer is None:
                         status = 'Pending'
@@ -77,11 +101,33 @@ class Slack(object):
                     else:
                         status = 'No'
 
-                    text += '%s: %s\n' % (question.text, status)
-                    if not question.answer:
-                        text += '\n'
+                    next_msg.append('%s: %s' % (question.text, status))
 
-            text += "**************************************"
+                    if not question.answer:
+                        sub_lines.append('\n'.join(next_msg))
+                        next_msg = []
+
+                if next_msg:
+                    sub_lines.append('\n'.join(next_msg))
+
+                status_lines['sub_lines'] = sub_lines
+
+            status_lines['footer'] = "**************************************"
+
+            return status_lines
+
+    def handle_status(self, data, submode):
+        channel = data['channel_id']
+        url = data['response_url']
+
+        status = self.get_status(channel)
+
+        text = '\n'.join( \
+            [status['header']] + \
+            status['text_lines'] + \
+            ['\n'] + \
+            ['\n\n'.join(status['sub_lines'])] + \
+            [status['footer']])
 
         self.reply_text(text, url)
 
@@ -268,6 +314,7 @@ class Slack(object):
         url = data['response_url']
         stump_id = callback_id['id']
         original_text = data['original_message']['text']
+        channel = data['channel']['id']
 
         # Update stump record
         stump = Stump.objects.get(id=stump_id)
@@ -288,12 +335,15 @@ class Slack(object):
                 % (original_text, stump.game.creator)
         self.reply_text(text, url)
 
+        self.send_short_status(channel, stump.game)
+
     def handle_question_action(self, data, callback_id):
         # TODO: validate user
 
         url = data['response_url']
         question_id = callback_id['id']
         original_text = data['original_message']['text']
+        channel = data['channel']['id']
 
         # Update question record
         question = Question.objects.get(id=question_id)
@@ -313,6 +363,22 @@ class Slack(object):
             text = '%s\n\n*Nope!* Time for <@channel|user> to stump.' \
                 % (original_text)
         self.reply_text(text, url)
+
+        self.send_short_status(channel, question.game)
+
+    def send_short_status(self, channel, game):
+        status = self.get_status(channel, game)
+        text = '\n'.join( \
+            [status['header']] + \
+            status['text_lines'] + \
+            [status['footer']])
+        ret = self.send_message(text, channel)
+        
+        if ret['ok']:
+            thread_ts = ret['ts']
+            for line in status['sub_lines']:
+                self.send_thread_message(line, channel, thread_ts)
+
 
 def parse_slash_command(text):
     match = re.match('(\w+)(.*)', text)
