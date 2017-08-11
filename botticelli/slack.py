@@ -374,10 +374,10 @@ class Slack(object):
             [status['footer']])
         ret = self.send_message(text, channel)
         
-        if ret['ok']:
-            thread_ts = ret['ts']
-            for line in status['sub_lines']:
-                self.send_thread_message(line, channel, thread_ts)
+        #if ret['ok']:
+        #    thread_ts = ret['ts']
+        #    for line in status['sub_lines']:
+        #        self.send_thread_message(line, channel, thread_ts)
 
 
 def parse_slash_command(text):
