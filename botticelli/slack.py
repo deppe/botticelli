@@ -212,7 +212,7 @@ class Slack(object):
             raise SlackException("Pending stump needs to be resolved before asking another")
 
         if game.state == State.PendingQuestion or game.state == State.Question:
-            raise SlackException("We're asking stumps, not questions!")
+            raise SlackException("We're asking questions, not stumps!")
 
         # Create stump
         stump = game.stump_set.create(creator=username, text=stump_text)
@@ -248,7 +248,7 @@ class Slack(object):
             raise SlackException("Pending question needs to be resolved before asking another")
 
         if game.state == State.PendingStump or game.state == State.Stump:
-            raise SlackException("We're asking questions, not stumps!")
+            raise SlackException("We're asking stumps, not questions!")
 
         #TODO: validate user
 
