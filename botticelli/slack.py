@@ -15,14 +15,24 @@ class Slack(object):
     def __init__(self, token):
         self.client = slackclient.SlackClient(token)
 
-    def send_message(self, text, channel):
-        rc = self.client.api_call('chat.postMessage',
-                                  text=text,
-                                  channel=channel)
+    def send_message(self, text, channel, attachments=[]):
+        logger.info('posting message %s %s %s', text, channel, repr(attachments))
+        ret = self.client.api_call('chat.postMessage',
+                                   text=text,
+                                   channel=channel,
+                                   attachments=attachments)
+
+        logger.info(ret)
+        return ret
+ 
+    def delete_message(self, channel, thread_ts):
+        logger.info('deleting %s %s', channel, thread_ts)
+        rc = self.client.api_call('chat.delete',
+                                  channel=channel,
+                                  ts=thread_ts)
 
         logger.info(rc)
         return rc
- 
 
     def send_thread_message(self, text, channel, thread_ts):
         rc = self.client.api_call('chat.postMessage',
@@ -33,6 +43,8 @@ class Slack(object):
         return rc
 
     def handle_slash(self, data):
+        logger.info(data)
+
         action, params = parse_slash_command(data['text'])
 
         func = {
@@ -60,14 +72,12 @@ class Slack(object):
         status_lines = {
             'header': None,
             'text_lines': 'No active game of Botticelli',
-            'sub_lines': None,
+            'sub_lines': [],
             'footer': None
         }
 
         if not game:
-            games = Game.get_active(channel)
-            if games:
-                game = games[0]
+            game = Game.get_active(channel)
     
         if game:
             if game.state == State.Stump:
@@ -137,13 +147,35 @@ class Slack(object):
         username = data['user_name']
 
         if type == 'game':
-            games = Game.get_active(channel_id).update(state=State.Cancelled)
+            game = Game.get_active(channel_id)
+            game.state = State.Cancelled
+            game.save()
             text = '*%s* cancelled current game' % username
             self.reply_text(text, url)
         elif type == 'stump':
-            pass
+            game = Game.get_active(channel_id)
+            stump = game.get_active_stump()
+            if stump:
+                stump.game.state = State.Stump
+                stump.game.save()
+                stump.delete()
+                text = '*%s* cancelled current stump' % username
+                self.delete_message(channel_id, stump.thread_ts)
+                self.reply_text(text, url)
+            else:
+                self.reply_ephemeral_text('No active stump to cancel!', url)
         elif type == 'question':
-            pass
+            game = Game.get_active(channel_id)
+            question = game.get_active_question()
+            if question:
+                question.game.state = State.Question
+                question.game.save()
+                question.delete()
+                text = '*%s* cancelled current question' % username
+                self.delete_message(channel_id, question.thread_ts)
+                self.reply_text(text, url)
+            else:
+                self.reply_ephemeral_text('No active question to cancel!', url)
         else:
             raise SlackException("No cancel argument provided")
 
@@ -200,13 +232,11 @@ class Slack(object):
         url = data['response_url']
 
         # Get active games
-        games = Game.get_active(channel_id)
+        game = Game.get_active(channel_id)
 
         # Validate the game state
-        if not games:
+        if not game:
             raise SlackException("No active game")
-
-        game = games[0]
 
         if game.state == State.PendingStump:
             raise SlackException("Pending stump needs to be resolved before asking another")
@@ -225,7 +255,10 @@ class Slack(object):
         text = '*%s* asks stumper:\n*%s*' % (username, stump_text)
         footer = '<@%s|user>, Are you stumped? If not, prove it!' % game.creator
         callback_id = json.dumps({'type': 'stump', 'id': stump.id})
-        self.send_yesno(text, footer, callback_id, url, 'I\'m stumped!', 'Not stumped!')
+        ret = self.send_yesno(text, footer, callback_id, channel_id, 'I\'m stumped!', 'Not stumped!')
+
+        stump.thread_ts = ret['ts']
+        stump.save()
 
     def handle_question(self, data, question_text):
         if not question_text:
@@ -236,13 +269,11 @@ class Slack(object):
         url = data['response_url']
 
         # Get active games
-        games = Game.get_active(channel_id)
+        game = Game.get_active(channel_id)
 
         # Validate the game state
-        if not games:
+        if not game:
             raise SlackException("No active game")
-
-        game = games[0]
 
         if game.state == State.PendingQuestion:
             raise SlackException("Pending question needs to be resolved before asking another")
@@ -253,17 +284,23 @@ class Slack(object):
         #TODO: validate user
 
         # Create question
-        question = game.question_set.create(creator=username, text=question_text)
+        question = game.question_set.create(creator=username, 
+                                            text=question_text)
 
         # Change state
         game.state = State.PendingQuestion
         game.save()
 
+
         # Send question message attachment
         text = '*%s* asks yes/no question for <@%s|user>:\n*%s*' \
             % (username, game.creator, question_text)
         callback_id = json.dumps({'type': 'question', 'id': question.id})
-        self.send_yesno(text, '', callback_id, url)
+        ret = self.send_yesno(text, '', callback_id, channel_id)
+
+        question.thread_ts = ret['ts']
+        question.save()
+
 
     def reply_text(self, text, url):
         payload = {
@@ -287,7 +324,7 @@ class Slack(object):
         result = requests.post(url, json=data, headers=headers)
         result.raise_for_status()
 
-    def send_yesno(self, stump_text, footer, callback_id, url, yes_text='Yes', no_text='No'):
+    def send_yesno(self, stump_text, footer, callback_id, channel_id, yes_text='Yes', no_text='No'):
         data = {
             "text": stump_text,
             "response_type": "in_channel",
@@ -305,19 +342,22 @@ class Slack(object):
             ]
         }
 
-        self.respond_to_url(data, url)
+        return self.send_message(data['text'], channel_id, data['attachments'])
 
 
     def handle_stump_action(self, data, callback_id):
-        # TODO: validate user
-
         url = data['response_url']
         stump_id = callback_id['id']
         original_text = data['original_message']['text']
         channel = data['channel']['id']
+        username = data['user']['name']
 
         # Update stump record
         stump = Stump.objects.get(id=stump_id)
+
+        if stump.creator != username:
+            raise SlackException("Only %s can answer the stump!" % stump.creator)
+
         stump.answer = data['actions'][0]['value'] == 'yes'
         stump.save()
 
@@ -338,15 +378,17 @@ class Slack(object):
         self.send_short_status(channel, stump.game)
 
     def handle_question_action(self, data, callback_id):
-        # TODO: validate user
-
         url = data['response_url']
         question_id = callback_id['id']
         original_text = data['original_message']['text']
         channel = data['channel']['id']
+        username = data['user']['name']
 
         # Update question record
         question = Question.objects.get(id=question_id)
+        if question.creator != username:
+            raise SlackException("Only %s can answer the question!" % stump.creator)
+
         question.answer = data['actions'][0]['value'] == 'yes'
         question.save()
 

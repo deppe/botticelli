@@ -3,8 +3,6 @@ from django.db import models
 from django.db.models import Max
 import logging
 
-logger = logging.getLogger('wrinklr')
-
 class State(object):
     Stump = 0
     PendingStump = 1
@@ -24,13 +22,13 @@ class Game(models.Model):
 
     def get_active_stump(self):
         stumps = self.stump_set.filter(answer=None)
-        if (stumps):
+        if stumps:
             return stumps[0]
         return None
 
     def get_active_question(self):
         questions = self.question_set.filter(answer=None)
-        if (questions):
+        if questions:
             return questions[0]
         return None
 
@@ -39,8 +37,11 @@ class Game(models.Model):
 
     @staticmethod
     def get_active(channel_id):
-        return Game.objects.filter(channel=channel_id) \
-                           .exclude(state__in=(State.Done, State.Cancelled))
+        games = Game.objects.filter(channel=channel_id) \
+            .exclude(state__in=(State.Done, State.Cancelled))
+        if not games:
+            return None
+        return games[0]
 
     def __str__(self):
         return repr(self)
@@ -59,6 +60,7 @@ class Question(models.Model):
     text = models.CharField(max_length=1024)
     answer = models.NullBooleanField(default=None)
     game = models.ForeignKey(Game)
+    thread_ts = models.CharField(max_length=32, default='')
     date_updated = models.DateTimeField(auto_now = True)
     date_created = models.DateTimeField(auto_now_add = True)
 
@@ -77,6 +79,7 @@ class Stump(models.Model):
     text = models.CharField(max_length=1024)
     answer = models.NullBooleanField(default=None)
     game = models.ForeignKey(Game)
+    thread_ts = models.CharField(max_length=32, default='')
     date_updated = models.DateTimeField(auto_now = True)
     date_created = models.DateTimeField(auto_now_add = True)
 

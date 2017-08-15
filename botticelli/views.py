@@ -14,7 +14,7 @@ _slack = slack.Slack(settings.SLACK_OATH_TOKEN)
 @csrf_exempt
 @require_POST
 def slack_slash(request):
-    logger.info(request.POST)
+    logger.info(request.POST.urlencode())
     try:
         _slack.handle_slash(request.POST)
     except slack.SlackException as e:
