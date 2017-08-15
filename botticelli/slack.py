@@ -355,7 +355,7 @@ class Slack(object):
         # Update stump record
         stump = Stump.objects.get(id=stump_id)
 
-        if stump.creator != username:
+        if stump.game.creator != username:
             raise SlackException("Only %s can answer the stump!" % stump.creator)
 
         stump.answer = data['actions'][0]['value'] == 'yes'
@@ -386,7 +386,7 @@ class Slack(object):
 
         # Update question record
         question = Question.objects.get(id=question_id)
-        if question.creator != username:
+        if question.game.creator != username:
             raise SlackException("Only %s can answer the question!" % stump.creator)
 
         question.answer = data['actions'][0]['value'] == 'yes'
